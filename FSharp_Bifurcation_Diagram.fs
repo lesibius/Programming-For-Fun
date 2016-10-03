@@ -107,7 +107,7 @@ let concatenatedsequence shortener rmin rmax nr x0 xmin xmax = fun func ->
 *****************************************************************************)
 
 let exportArrayAsCsv (values: (float*float) []) =
-    use wr = StreamWriter(@"C:\Users\Clémentin\Dropbox\Science\Chaos Theory\Bifurcation Diagram\test.csv", true)
+    use wr = StreamWriter(@"mypath.csv", true)
     let arraytoprint = Array.map (fun (r,x) -> sprintf "%f,%f" r x) values
     arraytoprint |> Array.map (fun x -> wr.WriteLine(x))
     
