@@ -135,15 +135,19 @@ let startingvalue = 0.2
 
 [<EntryPoint>]
 let main argv = 
+    //Creates the "shortener" to remove points before the attraction actually occurs
     let shortener = shortensequence npointsnotdisplayed npointsdisplayed
-    let seqtodisplay = (concatenatedsequence shortener rmin rmax numberofrvalue startingvalue xmin xmax logisticequation)
 
-    printfn "%A" seqtodisplay
+    //Create
+    let pointstodisplay = (concatenatedsequence shortener rmin rmax numberofrvalue startingvalue xmin xmax logisticequation)
 
-    let x = seqtodisplay |> Array.map (fun (x,y) -> x) 
-    let y = seqtodisplay |> Array.map (fun (x,y) -> y) 
-    //exportArrayAsCsv seqtodisplay
-    //seqtodisplay |> Chart.Point |> Chart.Show
+    //Uncomment to see some iterations
+    //printfn "%A" seqtodisplay
+
+    
+    let x = pointstodisplay |> Array.map (fun (x,y) -> x) 
+    let y = pointstodisplay |> Array.map (fun (x,y) -> y) 
+    
     R.plot(namedParams [   
         "x", box x;
         "y", box y; 
@@ -153,5 +157,4 @@ let main argv =
         "col", box "lightgrey";
         "ylim", box [xmin; xmax] ])
 
-    //printfn "%A" (logisticequationSeq 4.0 0.2)
     0 // retourne du code de sortie entier
