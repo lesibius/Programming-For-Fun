@@ -1,5 +1,7 @@
 (**********************************************************************************************
+
                     Plotting the Logistic Equation Bifurcation Diagram
+
 **********************************************************************************************)
 
 (*
@@ -7,69 +9,123 @@ Lastly, I got interested in the Chaos Theory and I wanted to create my own progr
 bifurcation diagrams. 
 
 I thought it would be a good idea to do it on F# as it would allow to conveniently use the
-iterated function definition as an input.
+iterated function definition as an input. For now, I only coded the logistic equation, but
+more might be added later.
 
-The program works as expected, except that it is very slow. I suspect two reasons for this:
-1) I used a recursive loop to generate the points
-2) I am using sequences, which I have to admit, I do not yet fully understand when they are
-    a good idea to use. I think the program is actually computing the path of the iterated
-    function from scratch each time a new point is calculated.
+This program use both sequences and arrays to function. The advantage of sequences is that
+they allow to create an infinite "list", while arrays offer a faster speed of execution.
 
-As usual, the beauty of F# is at work, and the number of lines to create the full program 
-is fairly low.
+In order to accelerate the plotting, I used the RProvider library to create the chart.
+The first implementation of this code used FSharp.Charting, which was really slow.
 
 *)
 
+(*****************************************************************************
+                            Loading Libraries
+*****************************************************************************)
+
+open RDotNet
+open RProvider
+open RProvider.graphics
+
+//These two libraries allow to export the path as CSV
+open System.IO
+open System.Diagnostics
 
 
+(*****************************************************************************
+                            Equations for Bifurcation
+*****************************************************************************)
 
-open System
-open FSharp.Charting
-open System.Drawing
-
+//For now, only the logistic equation is supported
 let logisticequation r = fun x0 ->
     r * x0 * (1.0 - x0)
+
+//To add other equations, define a new function with the following form:
+// <float> -> (<float> -> <float>)
+// The parameter (r:float) is the one that is varied to create the diagram
     
+(****************************************************************************
+                            Generating Points
+*****************************************************************************)
+
+//Generate an infinite sequence using the equation provided
 let generatesequence x0 = fun func -> 
     Seq.unfold (fun x -> Some (x, func x)) x0
 
-let shortensequence notshowed showed = fun (sequence:seq<float>) ->
-    sequence |> Seq.skip notshowed |> Seq.take showed
+//Shorten the sequence so the first iteration are not displayed
+let shortensequence notshowed showed = fun (iteratedValues:seq<float>) ->
+    iteratedValues |> Seq.skip notshowed |> Seq.take showed |> Seq.toArray
 
-let attributexvalue r = fun (sequence:seq<float>) -> 
-    Seq.map (fun x -> (r,x)) sequence
+//Remove the values that are outside the plot on the y axis
+let removeupanddown xmin xmax = fun (iteratedValues:float []) ->
+    iteratedValues |> Array.filter (fun x -> (x >= xmin) && (x <= xmax))
 
-let concatenatedsequence shortener rmin rmax nr x0 = fun func ->
+//In order to speed the plotting process, unnecessary values (i.e. periodic values) are removed
+let removeperiodicvalue = fun (iteratedValues:float []) ->
+    match iteratedValues |> Array.isEmpty with
+    | true -> None
+    | false -> 
+        let firstValue = iteratedValues |> Array.item 0
+        let x =  Array.sub iteratedValues 1 ((iteratedValues |> Array.length) - 1) |>Array.tryFindIndex (fun x -> x = firstValue)
+        match x with 
+        | Some index -> Some (Array.sub iteratedValues 0 (index + 1))
+        | None -> Some(iteratedValues)
+
+//This function has the following form: <float []> -> <option <float * float []>
+//It creates the coordinates of the points to plot for a single value of the function parameter
+let attributexvalue r = fun (sequence:float [] option) -> 
+    match sequence with
+    | Some value -> Some (Array.map (fun x -> (r,x)) value)
+    | None -> None
+    
+//Create the points through a recursive loop
+let concatenatedsequence shortener rmin rmax nr x0 xmin xmax = fun func ->
     let deltar = (rmax - rmin)/(float nr)
-    let rec loop currentseq r n =
+    let rec loop currentArray r n =
         match n with
-        | N when N > nr -> currentseq
-        | _ -> loop (func r |> (generatesequence x0) |> shortener |> attributexvalue r |> Seq.append currentseq) (r + deltar) (n + 1)
-    loop (Seq.empty) rmin 0
+        | N when N > nr -> currentArray
+        | _ -> 
+            let tempSeq = func r |> (generatesequence x0) |> shortener |> (removeupanddown xmin xmax) |> removeperiodicvalue |> attributexvalue r 
+            let tempArray =
+                match tempSeq with
+                | Some value -> value |> Array.append currentArray
+                | None -> currentArray
+            loop tempArray (r + deltar) (n + 1)
+    loop (Array.empty) rmin 0
+
+
+(*****************************************************************************
+                            Charting Points
+*****************************************************************************)
+//All this is done through R
 
 
 
-let printmulti funtoprint x0 maxStep =
-    let rec loop value step =
-        match step with
-        |   n when n >= maxStep -> ()
-        |   _ ->
-            let tempvalue = (funtoprint value) 
-            printfn "%A" tempvalue
-            loop tempvalue (step + 1)
-    loop x0 1
+(*****************************************************************************
+                            Exporting as CSV
+*****************************************************************************)
+
+let exportArrayAsCsv (values: (float*float) []) =
+    use wr = StreamWriter(@"C:\Users\Clémentin\Dropbox\Science\Chaos Theory\Bifurcation Diagram\test.csv", true)
+    let arraytoprint = Array.map (fun (r,x) -> sprintf "%f,%f" r x) values
+    arraytoprint |> Array.map (fun x -> wr.WriteLine(x))
+    
     
 
+     
 
 (*****************************************************************************
                             Parameters
 *****************************************************************************)
-
-let rmin = 0.0
-let rmax = 4.0
+//NB: with these settings, the plot is zommed ~ x100
+let rmin = 3.56
+let rmax = 3.58
+let xmin = 0.45
+let xmax = 0.54
 let npointsnotdisplayed = 1000
-let npointsdisplayed = 100
-let numberofrvalue = 100
+let npointsdisplayed = 500
+let numberofrvalue = 1000
 let startingvalue = 0.2
 
 
@@ -79,11 +135,23 @@ let startingvalue = 0.2
 
 [<EntryPoint>]
 let main argv = 
-    
-    let seqtodisplay = (concatenatedsequence (shortensequence npointsnotdisplayed npointsdisplayed) rmin rmax numberofrvalue startingvalue logisticequation) |> Seq.toArray
+    let shortener = shortensequence npointsnotdisplayed npointsdisplayed
+    let seqtodisplay = (concatenatedsequence shortener rmin rmax numberofrvalue startingvalue xmin xmax logisticequation)
 
-    seqtodisplay |> Chart.Point |> Chart.Show
-    
+    printfn "%A" seqtodisplay
+
+    let x = seqtodisplay |> Array.map (fun (x,y) -> x) 
+    let y = seqtodisplay |> Array.map (fun (x,y) -> y) 
+    //exportArrayAsCsv seqtodisplay
+    //seqtodisplay |> Chart.Point |> Chart.Show
+    R.plot(namedParams [   
+        "x", box x;
+        "y", box y; 
+        "pch", box 19;
+        "cex",box 0.1;
+        "type", box "p"; 
+        "col", box "lightgrey";
+        "ylim", box [xmin; xmax] ])
 
     //printfn "%A" (logisticequationSeq 4.0 0.2)
     0 // retourne du code de sortie entier
