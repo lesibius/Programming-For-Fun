@@ -9,8 +9,7 @@ Lastly, I got interested in the Chaos Theory and I wanted to create my own progr
 bifurcation diagrams. 
 
 I thought it would be a good idea to do it on F# as it would allow to conveniently use the
-iterated function definition as an input. For now, I only coded the logistic equation, but
-more might be added later.
+iterated function definition as an input.
 
 This program use both sequences and arrays to function. The advantage of sequences is that
 they allow to create an infinite "list", while arrays offer a faster speed of execution.
@@ -37,9 +36,15 @@ open System.Diagnostics
                             Equations for Bifurcation
 *****************************************************************************)
 
-//For now, only the logistic equation is supported
+
 let logisticequation r = fun x0 ->
     r * x0 * (1.0 - x0)
+
+let cubicequation r = fun x0 ->
+    r * (x0 ** 2.0) * ( 1.0 - x0)
+
+let sinefunction r = fun x0 ->
+    r * sin((System.Math.PI * x0)/2.0)
 
 //To add other equations, define a new function with the following form:
 // <float> -> (<float> -> <float>)
